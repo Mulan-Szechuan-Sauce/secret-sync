@@ -1,21 +1,36 @@
+use std::{collections::HashMap, sync::Arc, time::Duration};
+
 use clap::Parser;
+use futures::{StreamExt, TryStreamExt, stream};
 use k8s_openapi::api::core::v1::Secret;
-use kube::{api::ListParams, config::KubeConfigOptions, Api, Client, CustomResourceExt};
-use serde::{Serialize, Deserialize};
+use kube::{
+    Api, Client, CustomResourceExt, ResourceExt,
+    api::ListParams,
+    config::KubeConfigOptions,
+    runtime::{WatchStreamExt, reflector, watcher},
+};
 use kube_derive::CustomResource;
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use tokio::sync::Mutex;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 enum Args {
     Run,
-    Crds
+    Crds,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+struct SecretTarget {
+    name: String,
+    namespace: String,
 }
 
 #[derive(CustomResource, Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[kube(group = "homerow.ca", version = "v1", kind = "Foo", namespaced)]
 struct FooSpec {
-    info: String,
+    secret: SecretTarget,
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -27,12 +42,43 @@ async fn run() -> anyhow::Result<()> {
     let config = kube::Config::from_kubeconfig(&options).await?;
     let client = Client::try_from(config)?;
 
-    let api = Api::<Secret>::all(client);
+    let crd_api = Api::<Foo>::all(client.clone());
 
-    let secrets = api.list(&ListParams::default()).await?;
-    for s in secrets {
-        dbg!(s);
-    }
+    let (reader, writer) = reflector::store::<Foo>();
+
+    tokio::spawn(async move {
+        reader.wait_until_ready().await.unwrap();
+
+        let secret_api = Api::<Secret>::all(client.clone());
+        let mut secret_watcher = watcher(secret_api, watcher::Config::default())
+            .applied_objects()
+            .default_backoff()
+            .boxed();
+
+        while let Some(secret) = secret_watcher
+            .try_next()
+            .await
+            .expect("Unable to read from secret stream")
+        {
+            for target in reader.state().iter() {
+                if secret.name_any() == target.spec.secret.name {
+                    println!("Huzzah: {}", secret.name_any());
+                }
+            }
+        }
+    });
+
+    watcher(crd_api, watcher::Config::default())
+        .reflect(writer)
+        .applied_objects()
+        .default_backoff()
+        .for_each(|res| async move {
+            match res {
+                Ok(o) => println!("Found: {}", o.name_any()),
+                Err(e) => println!("watcher error: {}", e),
+            }
+        })
+        .await;
 
     Ok(())
 }
@@ -44,12 +90,11 @@ async fn main() -> anyhow::Result<()> {
     match args {
         Args::Crds => {
             println!("{}", serde_yaml::to_string(&Foo::crd()).unwrap());
-        },
+        }
         Args::Run => {
             run().await?;
-        },
+        }
     };
-
 
     Ok(())
 }
