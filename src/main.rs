@@ -42,14 +42,12 @@ async fn run() -> anyhow::Result<()> {
     let config = kube::Config::from_kubeconfig(&options).await?;
     let client = Client::try_from(config)?;
 
-    let crd_api = Api::<Foo>::all(client.clone());
-
     let (reader, writer) = reflector::store::<Foo>();
 
+    let secret_api = Api::<Secret>::all(client.clone());
     tokio::spawn(async move {
         reader.wait_until_ready().await.unwrap();
 
-        let secret_api = Api::<Secret>::all(client.clone());
         let mut secret_watcher = watcher(secret_api, watcher::Config::default())
             .applied_objects()
             .default_backoff()
@@ -61,26 +59,47 @@ async fn run() -> anyhow::Result<()> {
             .expect("Unable to read from secret stream")
         {
             for target in reader.state().iter() {
-                if secret.name_any() == target.spec.secret.name {
-                    println!("Huzzah: {}", secret.name_any());
-                }
+                process_match(&target, &secret).await;
             }
         }
     });
 
+    let crd_api = Api::<Foo>::all(client.clone());
     watcher(crd_api, watcher::Config::default())
         .reflect(writer)
         .applied_objects()
         .default_backoff()
-        .for_each(|res| async move {
-            match res {
-                Ok(o) => println!("Found: {}", o.name_any()),
-                Err(e) => println!("watcher error: {}", e),
+        .boxed()
+        .for_each(|res| {
+            let api = Api::<Secret>::all(client.clone());
+            async move {
+                match res {
+                    Ok(o) => {
+                        println!("Found: {}", o.name_any());
+                        for secret in api.list(&ListParams::default()).await.expect("Failed to list secrets") {
+                            process_match(&o, &secret).await;
+                        }
+                    }
+                    Err(e) => println!("watcher error: {}", e),
+                }
             }
         })
         .await;
 
     Ok(())
+}
+
+async fn process_match(target: &Foo, secret: &Secret) {
+    if secret.name_any() == target.spec.secret.name
+        && secret.namespace().expect("Secrets should have namespaces")
+            == target.spec.secret.namespace
+    {
+        println!(
+            "Matching secret: {} found in namespace: {}",
+            secret.name_any(),
+            target.spec.secret.namespace
+        );
+    }
 }
 
 #[tokio::main]
