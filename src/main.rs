@@ -25,7 +25,7 @@ struct SecretTarget {
 }
 
 #[derive(CustomResource, Clone, Debug, Deserialize, Serialize, JsonSchema)]
-#[kube(group = "homerow.ca", version = "v1", kind = "SyncSecret", namespaced)]
+#[kube(group = "homerow.ca", version = "v1", kind = "SyncSecret")]
 struct SyncSecretSpec {
     secret: SecretTarget,
 }
