@@ -1,16 +1,15 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use clap::Parser;
 use futures::{StreamExt, TryStreamExt};
-use k8s_openapi::api::core::v1::Secret;
+use k8s_openapi::{
+    Metadata,
+    api::core::v1::{Namespace, Secret},
+};
 use kube::{
-    Api, Client, CustomResourceExt, ResourceExt,
-    config::KubeConfigOptions,
-    runtime::{
-        WatchStreamExt,
-        reflector::{self, Store, store::Writer},
-        watcher,
-    },
+    api::{ListParams, Object, ObjectMeta, Patch, PatchParams}, config::KubeConfigOptions, runtime::{
+        reflector::{self, store::Writer, Store}, watcher, WatchStreamExt
+    }, Api, Client, CustomResourceExt, ResourceExt
 };
 use kube_derive::CustomResource;
 use schemars::JsonSchema;
@@ -31,9 +30,11 @@ struct SecretTarget {
 }
 
 #[derive(CustomResource, Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 #[kube(group = "homerow.ca", version = "v1", kind = "SyncSecret")]
 struct SyncSecretSpec {
     secret: SecretTarget,
+    destination_namespaces: Vec<String>,
 }
 
 async fn run() -> anyhow::Result<()> {
@@ -80,8 +81,12 @@ fn spawn_secret_watcher_with_interrupt(
     new_crd_notifier: Arc<Notify>,
 ) {
     let secret_api = Api::<Secret>::all(client.clone());
+    let c = client.clone();
     tokio::spawn(async move {
-        store.wait_until_ready().await.expect("Writer dropped before ready");
+        store
+            .wait_until_ready()
+            .await
+            .expect("Writer dropped before ready");
 
         loop {
             let mut secret_watcher = watcher(secret_api.clone(), watcher::Config::default())
@@ -97,7 +102,7 @@ fn spawn_secret_watcher_with_interrupt(
 
                     Ok(Some(secret)) = secret_watcher.try_next() => {
                         for target in store.state().iter() {
-                            process_match(&target, &secret).await;
+                            process_match(&target, &secret, &c).await;
                         }
                     }
                 }
@@ -106,7 +111,7 @@ fn spawn_secret_watcher_with_interrupt(
     });
 }
 
-async fn process_match(target: &SyncSecret, secret: &Secret) {
+async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
     if secret.name_any() == target.spec.secret.name
         && secret
             .namespace()
@@ -114,10 +119,30 @@ async fn process_match(target: &SyncSecret, secret: &Secret) {
             .unwrap_or(false)
     {
         println!(
-            "Matching secret: {} found in namespace: {}",
+            "Matching secret: {} found in namespace: {}, destination_namespaces: {:?}",
             secret.name_any(),
-            target.spec.secret.namespace
+            target.spec.secret.namespace,
+            target.spec.destination_namespaces,
         );
+
+        for n in target.spec.destination_namespaces.iter() {
+            let new_secret = Secret {
+                metadata: ObjectMeta {
+                    namespace: Some(n.to_owned()),
+                    name: Some(secret.name_any()),
+                    ..ObjectMeta::default()
+                },
+                data: secret.data.clone(),
+                string_data: secret.string_data.clone(),
+                ..Secret::default()
+            };
+
+            let patch = Patch::Apply(new_secret);
+            let params = PatchParams::apply("secret");
+
+            let api = Api::<Secret>::namespaced(client.clone(), n);
+            api.patch(&secret.name_any(), &params, &patch).await.expect("Unable to patch");
+        }
     }
 }
 
