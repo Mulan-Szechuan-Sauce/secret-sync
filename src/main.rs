@@ -1,15 +1,17 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use clap::Parser;
 use futures::{StreamExt, TryStreamExt};
-use k8s_openapi::{
-    Metadata,
-    api::core::v1::{Namespace, Secret},
-};
+use k8s_openapi::api::core::v1::Secret;
 use kube::{
-    api::{ListParams, Object, ObjectMeta, Patch, PatchParams}, config::KubeConfigOptions, runtime::{
-        reflector::{self, store::Writer, Store}, watcher, WatchStreamExt
-    }, Api, Client, CustomResourceExt, ResourceExt
+    Api, Client, CustomResourceExt, ResourceExt,
+    api::{ObjectMeta, Patch, PatchParams},
+    config::KubeConfigOptions,
+    runtime::{
+        WatchStreamExt,
+        reflector::{self, Store, store::Writer},
+        watcher,
+    },
 };
 use kube_derive::CustomResource;
 use schemars::JsonSchema;
@@ -105,8 +107,8 @@ fn spawn_secret_watcher_with_interrupt(
                     _ = new_crd_notifier.notified() => break,
 
                     Ok(Some(secret)) = secret_watcher.try_next() => {
-                        for target in store.state().iter() {
-                            process_match(&target, &secret, &c).await;
+                        for sync_crd in store.state().iter() {
+                            process_match(sync_crd, &secret, &c).await;
                         }
                     }
                 }
@@ -149,7 +151,11 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
             if let Err(e) = api.patch(&secret.name_any(), &params, &patch).await {
                 error!("Error patching secret: {}", e);
             } else {
-                info!("Successfully patched secret '{}' in namespace '{}'", secret.name_any(), n);
+                info!(
+                    "Successfully patched secret '{}' in namespace '{}'",
+                    secret.name_any(),
+                    n
+                );
             }
         }
     }
@@ -163,7 +169,7 @@ async fn main() -> anyhow::Result<()> {
         Args::Crds => {
             println!("{}", serde_yaml::to_string(&SyncSecret::crd()).unwrap());
         }
-        Args::Run { tracing_level }=> {
+        Args::Run { tracing_level } => {
             tracing_subscriber::fmt()
                 .with_max_level(tracing_level)
                 .init();
