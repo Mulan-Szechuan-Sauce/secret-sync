@@ -26,9 +26,15 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 'Get app version'
+        id: app-version
+        run: |
+          VERSION="$(grep '^version =' Cargo.toml | cut -d'"' -f2)"
+          echo "app_version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - uses: docker/build-push-action@v6
         name: 'Build and push docker container'
         with:
           context: .
           push: true
-          tags: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest
+          tags: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest,ghcr.io/mulan-szechuan-sauce/sercet-sync:${{ steps.app-version.outputs.app_version }}
