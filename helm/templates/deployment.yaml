@@ -1,0 +1,23 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secret-sync
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: secret-sync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secret-sync
+  template:
+    metadata:
+      labels:
+        app: secret-sync
+    spec:
+      serviceAccountName: secret-sync
+      automountServiceAccountToken: true
+      containers:
+        - name: secret-sync
+          image: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest
