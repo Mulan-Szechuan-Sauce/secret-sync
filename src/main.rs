@@ -15,11 +15,15 @@ use kube_derive::CustomResource;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
+use tracing::{error, info};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 enum Args {
-    Run,
+    Run {
+        #[arg(long, default_value_t = tracing::Level::INFO)]
+        tracing_level: tracing::Level,
+    },
     Crds,
 }
 
@@ -66,10 +70,10 @@ async fn watch_crds(client: &Client, writer: Writer<SyncSecret>, new_crd_notifie
         .for_each(|res| async {
             match res {
                 Ok(o) => {
-                    println!("Found: {}", o.name_any());
+                    info!("SyncSecret '{}' created or updated", o.name_any());
                     new_crd_notifier.notify_waiters();
                 }
-                Err(e) => println!("watcher error: {}", e),
+                Err(e) => error!("CRD watcher error: {}", e),
             }
         })
         .await;
@@ -118,8 +122,8 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
             .map(|n| n == target.spec.secret.namespace)
             .unwrap_or(false)
     {
-        println!(
-            "Matching secret: {} found in namespace: {}, destination_namespaces: {:?}",
+        info!(
+            "Secret '{}' found in namespace: '{}' replicating to destination namespaces: {:?}",
             secret.name_any(),
             target.spec.secret.namespace,
             target.spec.destination_namespaces,
@@ -138,10 +142,15 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
             };
 
             let patch = Patch::Apply(new_secret);
-            let params = PatchParams::apply("secret");
+            let params = PatchParams::apply("secretsync.homerow.ca");
 
             let api = Api::<Secret>::namespaced(client.clone(), n);
-            api.patch(&secret.name_any(), &params, &patch).await.expect("Unable to patch");
+
+            if let Err(e) = api.patch(&secret.name_any(), &params, &patch).await {
+                error!("Error patching secret: {}", e);
+            } else {
+                info!("Successfully patched secret '{}' in namespace '{}'", secret.name_any(), n);
+            }
         }
     }
 }
@@ -154,7 +163,11 @@ async fn main() -> anyhow::Result<()> {
         Args::Crds => {
             println!("{}", serde_yaml::to_string(&SyncSecret::crd()).unwrap());
         }
-        Args::Run => {
+        Args::Run { tracing_level }=> {
+            tracing_subscriber::fmt()
+                .with_max_level(tracing_level)
+                .init();
+
             run().await?;
         }
     };
