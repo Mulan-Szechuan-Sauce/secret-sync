@@ -31,4 +31,4 @@ jobs:
         with:
           context: .
           push: false
-          tags: ghcr.io/Mulan-Szechuan-Sauce/sercet-sync:latest
+          tags: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest
