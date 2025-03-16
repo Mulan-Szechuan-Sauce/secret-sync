@@ -32,9 +32,16 @@ jobs:
           VERSION="$(grep '^version =' Cargo.toml | cut -d'"' -f2)"
           echo "app_version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - uses: tyriis/docker-image-tag-exists@v2.1.0
+        id: image-exists
+        with:
+          registry: ghcr.io
+          repository: mulan-szechuan-sauce/sercet-sync
+          tag: "${{ steps.app-version.outputs.app_version }}"
+
       - uses: docker/build-push-action@v6
         name: 'Build and push docker container'
         with:
           context: .
-          push: true
+          push: ${{ (steps.image-exists.outputs.tag == 'found') && 'false' || 'true' }}
           tags: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest,ghcr.io/mulan-szechuan-sauce/sercet-sync:${{ steps.app-version.outputs.app_version }}
