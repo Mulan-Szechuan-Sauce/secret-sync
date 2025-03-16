@@ -3,6 +3,16 @@ entries:
   secret-sync:
   - apiVersion: v2
     appVersion: 0.1.0
+    created: "2025-03-16T19:16:54.151301776Z"
+    description: A service for syncing secrets across multiple namespaces
+    digest: dba14fb2dd1a7d963ed94e2728369f97126bb8793f6ee2a6cfdcc53749c736e8
+    name: secret-sync
+    type: application
+    urls:
+    - https://github.com/Mulan-Szechuan-Sauce/secret-sync/releases/download/helm-secret-sync-0.1.1/secret-sync-0.1.1.tgz
+    version: 0.1.1
+  - apiVersion: v2
+    appVersion: 0.1.0
     created: "2025-03-16T17:43:27.175173827Z"
     description: A service for syncing secrets across multiple namespaces
     digest: a34026269643c22cd69adbf0c811506ddd217144e7eab598c91b2705fb12caf9
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://github.com/Mulan-Szechuan-Sauce/secret-sync/releases/download/helm-secret-sync-0.1.0/secret-sync-0.1.0.tgz
     version: 0.1.0
-generated: "2025-03-16T17:43:27.175180389Z"
+generated: "2025-03-16T19:16:54.151310072Z"
