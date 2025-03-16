@@ -1,1 +1,6 @@
+image:
+  repository: ghcr.io/mulan-szechuan-sauce/sercet-sync
+  tag: latest
 
+crds:
+  enabled: true

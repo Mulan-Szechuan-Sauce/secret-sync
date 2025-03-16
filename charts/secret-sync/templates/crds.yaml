@@ -1,0 +1,4 @@
+{{- if .Values.crds.enabled }}
+{{- .Files.Get "static/crds.yaml" }}
+{{- end }}
+

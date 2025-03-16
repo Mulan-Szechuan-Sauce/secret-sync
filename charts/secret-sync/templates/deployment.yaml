@@ -20,4 +20,4 @@ spec:
       automountServiceAccountToken: true
       containers:
         - name: secret-sync
-          image: ghcr.io/mulan-szechuan-sauce/sercet-sync:latest
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

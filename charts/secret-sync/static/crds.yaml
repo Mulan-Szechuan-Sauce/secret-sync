@@ -1,0 +1,48 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: syncsecrets.homerow.ca
+spec:
+  group: homerow.ca
+  names:
+    categories: []
+    kind: SyncSecret
+    plural: syncsecrets
+    shortNames: []
+    singular: syncsecret
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns: []
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for SyncSecretSpec via `CustomResource`
+        properties:
+          spec:
+            properties:
+              destinationNamespaces:
+                items:
+                  type: string
+                type: array
+              secret:
+                properties:
+                  name:
+                    type: string
+                  namespace:
+                    type: string
+                required:
+                - name
+                - namespace
+                type: object
+            required:
+            - destinationNamespaces
+            - secret
+            type: object
+        required:
+        - spec
+        title: SyncSecret
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+
