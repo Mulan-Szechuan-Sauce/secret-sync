@@ -39,7 +39,7 @@ async fn init() -> &'static Client {
             )
             .await?;
 
-        tokio::spawn(async { secret_sync::run().await });
+        tokio::spawn(secret_sync::run());
 
         Ok(client)
     }

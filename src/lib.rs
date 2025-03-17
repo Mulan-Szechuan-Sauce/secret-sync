@@ -119,7 +119,7 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
             };
 
             let patch = Patch::Apply(new_secret);
-            let params = PatchParams::apply("secretsync.homerow.ca");
+            let params = PatchParams::apply("syncsecret.homerow.ca");
 
             let api = Api::<Secret>::namespaced(client.clone(), n);
 
