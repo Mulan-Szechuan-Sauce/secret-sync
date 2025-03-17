@@ -1,8 +1,9 @@
 FROM rust:latest AS rbuilder
+ARG SKIP_TESTS
 WORKDIR /build
 COPY . .
-COPY config /root/.kube/config
-RUN cargo test --release
+RUN mkdir /root/.kube
+RUN [ -z "$SKIP_TESTS" ] && cp config /root/.kube/config && cargo test --release || echo Skipping tests
 RUN cargo build --release
 RUN strip ./target/release/secret-sync
 
