@@ -1,0 +1,12 @@
+---
+apiVersion: homerow.ca/v1
+kind: SyncSecret
+metadata:
+  name: test-syncer
+spec:
+  secret:
+    name: test-secret
+    namespace: default
+  destinationNamespaces:
+    - ns-one
+    - ns-two
