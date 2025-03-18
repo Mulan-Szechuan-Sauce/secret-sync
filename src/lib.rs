@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Secret;
 use kube::{
-    Api, Client, ResourceExt,
+    Api, Client, Resource, ResourceExt,
     api::{ObjectMeta, Patch, PatchParams},
     config::KubeConfigOptions,
     runtime::{
@@ -111,6 +111,11 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
                 metadata: ObjectMeta {
                     namespace: Some(n.to_owned()),
                     name: Some(secret.name_any()),
+                    labels: Some(BTreeMap::from([(
+                        "homerow.ca/source-namespace".to_owned(),
+                        target.spec.secret.namespace.to_owned(),
+                    )])),
+                    owner_references: Some(vec![target.owner_ref(&()).unwrap()]),
                     ..ObjectMeta::default()
                 },
                 data: secret.data.clone(),

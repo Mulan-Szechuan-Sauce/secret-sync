@@ -1,10 +1,12 @@
+use std::error::Error;
+
 use k8s_openapi::{
     api::core::v1::{Namespace, Secret},
     apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
 };
 use kube::{
     Client, CustomResourceExt, ResourceExt,
-    api::{ObjectMeta, Patch, PatchParams},
+    api::{DeleteParams, ObjectMeta, Patch, PatchParams},
     config::KubeConfigOptions,
 };
 use secret_sync::crds::*;
@@ -12,6 +14,7 @@ use tokio::{
     sync::OnceCell,
     time::{Duration, sleep},
 };
+use tokio_retry2::{Retry, RetryError, strategy::ExponentialBackoff};
 
 static ONCE_CLIENT: OnceCell<anyhow::Result<Client>> = OnceCell::const_new();
 
@@ -47,8 +50,7 @@ async fn init() -> &'static Client {
     ONCE_CLIENT.get_or_init(init_fun).await.as_ref().unwrap()
 }
 
-#[tokio::test]
-async fn secrets_replicate() {
+async fn setup_manifests() -> (SyncSecret, Secret) {
     let client = init().await;
 
     let ns_api = kube::Api::<Namespace>::all(client.clone());
@@ -96,25 +98,49 @@ async fn secrets_replicate() {
         .await
         .expect("Unable to patch Secret");
 
-    let mut count = 3;
-    while count > 0 {
-        for target in syncer.spec.destination_namespaces.iter() {
-            let secret_api = kube::Api::<Secret>::namespaced(client.clone(), target);
+    (syncer, secret)
+}
 
-            match secret_api.get(&syncer.spec.secret.name).await {
-                Ok(s) => {
-                    assert_eq!(s.data, secret.data);
-                    assert_eq!(s.string_data, secret.string_data);
-                    return;
+#[tokio::test]
+async fn secrets_replicate() {
+    let client = init().await;
+
+    let (syncer, secret) = setup_manifests().await;
+
+    let retry_strategy = ExponentialBackoff::from_millis(10)
+        .map(tokio_retry2::strategy::jitter)
+        .take(3);
+
+    let result = Retry::spawn(
+        retry_strategy,
+        async || -> Result<(), RetryError<()>> {
+            for target in syncer.spec.destination_namespaces.iter() {
+                let secret_api = kube::Api::<Secret>::namespaced(client.clone(), target);
+
+                match secret_api.get(&syncer.spec.secret.name).await {
+                    Ok(s) => {
+                        assert_eq!(s.data, secret.data);
+                        assert_eq!(s.string_data, secret.string_data);
+                    }
+                    Err(kube::Error::Api(e)) if e.code == 404 => {
+                        return Err(RetryError::transient(()));
+                    }
+                    Err(e) => panic!("Unable to get secret: {}", e),
                 }
-                Err(kube::Error::Api(e)) if e.code == 404 => break,
-                e => panic!("Error getting secret {:?}", e),
             }
-        }
 
-        count -= 1;
-        sleep(Duration::from_secs(1)).await;
+            Ok(())
+        },
+    )
+    .await;
+
+    if result.is_err() {
+        panic!("Failure replicating secrets after retries");
     }
 
-    panic!("Failure replicating secrets");
+    // let sync_api = kube::Api::<SyncSecret>::all(client.clone());
+    // sync_api
+    //     .delete(&syncer.name_any(), &DeleteParams::foreground())
+    //     .await
+    //     .expect("Unable to delete SyncSecret");
 }
