@@ -7,7 +7,7 @@ RUN [ -z "$SKIP_TESTS" ] && cp config /root/.kube/config && cargo test --release
 RUN cargo build --release
 RUN strip ./target/release/secret-sync
 
-FROM gcr.io/distroless/cc-debian12:latest AS release
+FROM debian:trixie-slim AS release
 WORKDIR /app
 COPY --from=rbuilder /build/target/release/secret-sync .
 
