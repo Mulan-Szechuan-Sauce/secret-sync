@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use k8s_openapi::{
     api::core::v1::{Namespace, Secret},
     apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
@@ -8,7 +10,7 @@ use kube::{
     config::KubeConfigOptions,
 };
 use secret_sync::crds::*;
-use tokio::sync::OnceCell;
+use tokio::{sync::OnceCell, time::sleep};
 use tokio_retry2::{Retry, RetryError, strategy::ExponentialBackoff};
 
 static ONCE_CLIENT: OnceCell<anyhow::Result<Client>> = OnceCell::const_new();
@@ -26,6 +28,8 @@ async fn init() -> &'static Client {
         }
 
         let client = Client::try_from(config)?;
+
+        sleep(Duration::from_secs(5)).await;
 
         let crd_api = kube::Api::<CustomResourceDefinition>::all(client.clone());
 
