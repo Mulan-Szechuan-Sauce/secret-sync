@@ -120,7 +120,8 @@ async fn process_match(target: &SyncSecret, secret: &Secret, client: &Client) {
                 },
                 data: secret.data.clone(),
                 string_data: secret.string_data.clone(),
-                ..Secret::default()
+                type_: secret.type_.clone(),
+                immutable: secret.immutable,
             };
 
             let patch = Patch::Apply(new_secret);

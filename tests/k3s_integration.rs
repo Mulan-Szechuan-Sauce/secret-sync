@@ -155,6 +155,8 @@ async fn validate_secret_replicated(
         Ok(s) => {
             assert_eq!(s.data, secret.data);
             assert_eq!(s.string_data, secret.string_data);
+            assert_eq!(s.type_, secret.type_);
+            assert_eq!(s.immutable, secret.immutable);
         }
         Err(kube::Error::Api(e)) if e.code == 404 => {
             return Err(RetryError::transient(()));
